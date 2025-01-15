@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    image: cryptobot:1.0.0
+    volumes:
+      - bot-data:/app/data
+    environment:
+      - WEATHER_API_KEY=${WEATHER_API_KEY}
+    restart: unless-stopped
+
+volumes:
+  bot-data: 
