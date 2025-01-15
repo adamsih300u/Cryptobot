@@ -15,7 +15,8 @@ A feature-rich Telegram bot that provides cryptocurrency prices, weather informa
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `/prices` | Get current cryptocurrency prices | `/prices` |
+| `/prices` | Get current prices of cryptocurrencies | `/prices` |
+| `/setcrypto` | Manage tracked cryptocurrencies | `/setcrypto +BTC,ETH` |
 | `/weather <zipcode>` | Get current weather for a ZIP code | `/weather 12345` |
 | `/forecast <zipcode>` | Get 3-day forecast for a ZIP code | `/forecast 12345` |
 | `/remindme <time> <message>` | Set a reminder | `/remindme 30m check email` |
@@ -23,6 +24,13 @@ A feature-rich Telegram bot that provides cryptocurrency prices, weather informa
 | `/fortune` | Get a fortune cookie message | `/fortune` |
 | `/info` | Show help message | `/info` |
 | `/thanks` | Say you're welcome | `/thanks` |
+
+### Cryptocurrency Management
+The bot allows customization of tracked cryptocurrencies using the `/setcrypto` command:
+- `/setcrypto +BTC,ETH` - Add BTC and ETH to tracking
+- `/setcrypto -BTC` - Remove BTC from tracking
+- `/setcrypto list` - Show currently tracked coins
+- `/setcrypto clear` - Clear all tracked coins
 
 ### Reminder Time Format
 - Supports: weeks(w), days(d), hours(h), minutes(m), seconds(s)

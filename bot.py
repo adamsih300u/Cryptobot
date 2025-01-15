@@ -22,6 +22,9 @@ DATA_FILE = os.getenv('DATA_FILE', 'bot_data.json')
 WEATHER_API_KEY = os.getenv('WEATHER_API_KEY')
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
+# Default crypto symbols if none are set
+DEFAULT_CRYPTO_SYMBOLS = ["BTC", "ETH", "XMR", "ERG"]
+
 if not WEATHER_API_KEY:
     logger.error("WEATHER_API_KEY environment variable is not set!")
     WEATHER_API_KEY = None
@@ -43,21 +46,105 @@ def load_data():
             data = json.load(f)
     else:
         data = {}
+    
+    # Initialize crypto_symbols if not present
+    if 'crypto_symbols' not in data:
+        data['crypto_symbols'] = DEFAULT_CRYPTO_SYMBOLS.copy()
+
+    # Initialize reminders if not present
+    if 'reminders' not in data:
+        data['reminders'] = {}
+    
+    save_data()
 
 # Initialize empty data dictionary
 data = {}
 
+def setcrypto(update, context):
+    """Handle the setcrypto command for managing cryptocurrency symbols"""
+    chat_id = update.effective_chat.id
+    
+    if not context.args:
+        symbols = data.get('crypto_symbols', DEFAULT_CRYPTO_SYMBOLS)
+        message = f"Currently tracking: {', '.join(symbols)}\n\n"
+        message += "Usage:\n"
+        message += "/setcrypto +SYMBOL,SYMBOL2 - Add symbols\n"
+        message += "/setcrypto -SYMBOL,SYMBOL2 - Remove symbols\n"
+        message += "/setcrypto clear - Clear all symbols\n"
+        message += "/setcrypto list - Show current symbols"
+        context.bot.send_message(chat_id=chat_id, text=message)
+        return
+
+    command = context.args[0].upper()
+    
+    if command == "LIST":
+        symbols = data.get('crypto_symbols', DEFAULT_CRYPTO_SYMBOLS)
+        message = f"Currently tracking: {', '.join(symbols)}"
+    
+    elif command == "CLEAR":
+        data['crypto_symbols'] = []
+        save_data()
+        message = "Cleared all cryptocurrency symbols."
+    
+    elif command.startswith("+") or command.startswith("-"):
+        # Get the current symbols
+        current_symbols = set(data.get('crypto_symbols', DEFAULT_CRYPTO_SYMBOLS))
+        
+        # Process the symbols (split by comma if multiple)
+        new_symbols = command[1:].split(',')
+        new_symbols = [s.strip().upper() for s in new_symbols if s.strip()]
+        
+        if command.startswith("+"):
+            # Add new symbols
+            current_symbols.update(new_symbols)
+            message = f"Added: {', '.join(new_symbols)}"
+        else:
+            # Remove symbols
+            current_symbols.difference_update(new_symbols)
+            message = f"Removed: {', '.join(new_symbols)}"
+        
+        # Update the stored symbols
+        data['crypto_symbols'] = sorted(list(current_symbols))
+        save_data()
+        
+        # Add current status to message
+        if data['crypto_symbols']:
+            message += f"\nCurrently tracking: {', '.join(data['crypto_symbols'])}"
+        else:
+            message += "\nNo symbols currently being tracked."
+    
+    else:
+        message = "Invalid command. Use +SYMBOL to add, -SYMBOL to remove, clear to reset, or list to show current symbols."
+    
+    context.bot.send_message(chat_id=chat_id, text=message)
+
 def prices(update, context):
+    """Get current prices for tracked cryptocurrencies"""
     chat_id = update.effective_chat.id
     message = ""
 
-    crypto_data = get_prices()
-    for i in crypto_data:
-        coin = crypto_data[i]["coin"]
-        price = crypto_data[i]["price"]
-        change_day = crypto_data[i]["change_day"]
-        change_hour = crypto_data[i]["change_hour"]
-        message += f"Coin: {coin}\nPrice: ${price:,.2f}\nHour Change: {change_hour:.3f}%\nDay Change: {change_day:.3f}%\n\n"
+    # Get the current list of symbols
+    symbols = data.get('crypto_symbols', DEFAULT_CRYPTO_SYMBOLS)
+    
+    if not symbols:
+        message = "No cryptocurrencies are being tracked. Use /setcrypto +SYMBOL to add some."
+        context.bot.send_message(chat_id=chat_id, text=message)
+        return
+
+    try:
+        crypto_data = get_prices(symbols)
+        for i in crypto_data:
+            coin = crypto_data[i]["coin"]
+            price = crypto_data[i]["price"]
+            change_day = crypto_data[i]["change_day"]
+            change_hour = crypto_data[i]["change_hour"]
+            message += f"Coin: {coin}\nPrice: ${price:,.2f}\nHour Change: {change_hour:.3f}%\nDay Change: {change_day:.3f}%\n\n"
+
+        if not message:
+            message = "No price data available for the tracked symbols."
+    except Exception as e:
+        logger.error(f"Error fetching prices: {str(e)}")
+        message = "Error fetching cryptocurrency prices. Please try again later."
 
     context.bot.send_message(chat_id=chat_id, text=message)
 
@@ -95,7 +182,9 @@ def remindme(update, context):
             
             # Store both message and scheduled time
             reminder_id = str(int(time.time()))  # Use timestamp as unique ID
-            data[reminder_id] = {
+            if 'reminders' not in data:
+                data['reminders'] = {}
+            data['reminders'][reminder_id] = {
                 "message": userto + cache_message,
                 "scheduled_time": scheduled_time,
                 "chat_id": update.effective_chat.id
@@ -115,11 +204,11 @@ def remindme(update, context):
 
 def call_back_time(context: telegram.ext.CallbackContext):
     reminder_id = context.job.context
-    if reminder_id in data:
-        reminder = data[reminder_id]
+    if reminder_id in data['reminders']:
+        reminder = data['reminders'][reminder_id]
         context.bot.send_message(chat_id=reminder["chat_id"], text=reminder["message"])
         # Clean up completed reminder
-        del data[reminder_id]
+        del data['reminders'][reminder_id]
         save_data()
 
 def restore_reminders(dispatcher):
@@ -127,7 +216,7 @@ def restore_reminders(dispatcher):
     current_time = time.time()
     to_delete = []
     
-    for reminder_id, reminder in data.items():
+    for reminder_id, reminder in data['reminders'].items():
         remaining_time = reminder["scheduled_time"] - current_time
         if remaining_time > 0:
             dispatcher.job_queue.run_once(
@@ -141,7 +230,7 @@ def restore_reminders(dispatcher):
     
     # Clean up expired reminders
     for reminder_id in to_delete:
-        del data[reminder_id]
+        del data['reminders'][reminder_id]
     if to_delete:
         save_data()
 
@@ -398,7 +487,13 @@ def info(update, context):
     message = "🤖 *Available Commands:*\n\n"
     
     message += "*Cryptocurrency:*\n"
-    message += "/prices - Get current prices of cryptocurrencies\n\n"
+    message += "/prices - Get current prices of cryptocurrencies\n"
+    message += "/setcrypto - Manage tracked cryptocurrencies\n"
+    message += "Examples:\n"
+    message += "• `/setcrypto +BTC,ETH` - Add BTC and ETH\n"
+    message += "• `/setcrypto -BTC` - Remove BTC\n"
+    message += "• `/setcrypto list` - Show tracked coins\n"
+    message += "• `/setcrypto clear` - Clear all coins\n\n"
     
     message += "*Weather:*\n"
     message += "/weather <zipcode> - Get current weather conditions\n"
@@ -441,6 +536,7 @@ def main():
 
     # Add command handlers first (they take precedence)
     dispatcher.add_handler(CommandHandler("prices", prices))
+    dispatcher.add_handler(CommandHandler("setcrypto", setcrypto))
     dispatcher.add_handler(CommandHandler("thanks", thanks))
     dispatcher.add_handler(CommandHandler("remindme", remindme))
     dispatcher.add_handler(CommandHandler("weather", weather))
