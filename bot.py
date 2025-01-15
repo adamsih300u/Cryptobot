@@ -18,7 +18,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-DATA_FILE = 'bot_data.json'
+DATA_FILE = os.getenv('DATA_FILE', 'bot_data.json')
 WEATHER_API_KEY = os.getenv('WEATHER_API_KEY')
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 

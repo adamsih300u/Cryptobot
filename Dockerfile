@@ -39,10 +39,11 @@ COPY --chown=botuser:botuser bot.py .
 COPY --chown=botuser:botuser cryptotracker.py .
 COPY --chown=botuser:botuser reminder.py .
 COPY --chown=botuser:botuser fortunes.py .
-COPY --chown=botuser:botuser bot_data.json .
 
-# Create and set permissions for data directory
-RUN mkdir -p /app/data && chown -R botuser:botuser /app/data
+# Create data directory and empty bot_data.json
+RUN mkdir -p /app/data && \
+    echo "{}" > /app/data/bot_data.json && \
+    chown -R botuser:botuser /app/data
 
 # Create volume for persistent data
 VOLUME ["/app/data"]
@@ -50,6 +51,7 @@ VOLUME ["/app/data"]
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PATH="/app/venv/bin:$PATH"
+ENV DATA_FILE="/app/data/bot_data.json"
 
 # Switch to non-root user
 USER botuser
